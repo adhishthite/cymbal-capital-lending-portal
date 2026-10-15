@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}",
+        "GITHUB_REPOSITORY": "adhishthite/cymbal-capital-lending-portal"
+      }
+    },
+    "gcp-bigquery": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "backend",
+        "python",
+        "-m",
+        "app.services.bq_telemetry",
+        "--mcp-helper"
+      ],
+      "env": {
+        "GOOGLE_CLOUD_PROJECT": "adhish-base-project-1",
+        "BIGQUERY_DATASET": "cymbal_capital_sdlc",
+        "GOOGLE_API_USE_CLIENT_CERTIFICATE": "false"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend / Bun / Vite
+node_modules/
+frontend/dist/
+.vite/
+
+# OS / Environment
+.DS_Store
+.env
+.env.*
