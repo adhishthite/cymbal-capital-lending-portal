@@ -97,7 +97,7 @@ ISSUES: list[dict[str, Any]] = [
         "body": (
             "## Objective\n"
             "Block adversarial instructions attempting to override RBI APR math, suppress processing fees, "
-            "or force compounding penal interest before calling `gemini-2.5-flash`."
+            "or force compounding penal interest before calling `gemini-3.8-flash`."
         ),
     },
     {

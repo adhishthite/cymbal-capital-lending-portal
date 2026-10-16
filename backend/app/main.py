@@ -21,8 +21,13 @@ from app.services.bq_telemetry import (
 )
 from app.services.gcp_dlp_armor import (
     DEFAULT_SME_MEETING_NOTES,
+    FAST_WORKHORSE_MODEL,
+    PRIMARY_REASONING_MODEL,
     audit_meeting_notes_for_rbi_gaps,
+    generate_credit_underwriting_memo_with_vertex,
+    generate_dlp_security_verdict_with_vertex,
     generate_executive_brd_summary_with_vertex,
+    generate_kfs_audit_verdict_with_vertex,
     inspect_and_redact_pii,
 )
 from app.services.kfs_calculator import (
@@ -67,6 +72,7 @@ class PIIInspectRequest(BaseModel):
         )
     )
     use_live_cloud_dlp: bool = Field(default=True)
+    include_ai_verdict: bool = Field(default=False)
 
 
 SPRINT_24_BACKLOG: list[dict[str, Any]] = [
@@ -182,7 +188,8 @@ def health_check() -> dict[str, Any]:
         "organization": "Cymbal Capital",
         "gcp_project": os.environ.get("GOOGLE_CLOUD_PROJECT", "adhish-base-project-1"),
         "region": "asia-south1",
-        "vertex_model": "gemini-2.5-flash",
+        "vertex_model": PRIMARY_REASONING_MODEL,
+        "fast_model": FAST_WORKHORSE_MODEL,
         "rbi_compliance_engine": "ACTIVE",
         "test_suite": {
             "unit_tests": 15,
@@ -199,6 +206,9 @@ def calculate_kfs_get() -> dict[str, Any]:
     result = calculate_kfs(default_req)
     payload = result.model_dump()
     payload["firestore_audit"] = log_kfs_audit_to_firestore(payload)
+    payload["ai_kfs_verdict"] = generate_kfs_audit_verdict_with_vertex(
+        payload, use_live_vertex=False
+    )
     return payload
 
 
@@ -213,6 +223,9 @@ def calculate_kfs_post(request: KFSRequest | None = None) -> dict[str, Any]:
 
     payload = result.model_dump()
     payload["firestore_audit"] = log_kfs_audit_to_firestore(payload)
+    payload["ai_kfs_verdict"] = generate_kfs_audit_verdict_with_vertex(
+        payload, use_live_vertex=req.include_ai_verdict
+    )
     return payload
 
 
@@ -237,6 +250,7 @@ def _run_brd_analysis(req: BRDAnalyzeRequest) -> dict[str, Any]:
         sanitized_notes=pii_result.sanitized_text,
         compliance_gaps=gaps,
         wbs_rows=wbs_data["benchmarks"],
+        use_live_vertex=req.use_live_gcp,
     )
 
     return {
@@ -290,9 +304,21 @@ def _run_credit_verification(req: CreditPolicyRequest) -> dict[str, Any]:
 
     blocked_issues = [i for i in SPRINT_24_BACKLOG if i["status"] == "BLOCKED"]
     unestimated_issues = [i for i in SPRINT_24_BACKLOG if i["status"] == "UNESTIMATED"]
+    ai_memo = generate_credit_underwriting_memo_with_vertex(
+        applicant_name=req.applicant_name,
+        loan_amount_inr=req.loan_amount_inr,
+        dscr=req.dscr,
+        ltv_pct=req.ltv_pct,
+        cmr_rank=req.cibil_commercial_rank,
+        decision=policy_result.decision,
+        approval_authority=policy_result.approval_authority,
+        policy_triggers=policy_result.policy_triggers,
+        use_live_vertex=req.include_ai_memo,
+    )
 
     return {
         "credit_evaluation": policy_result.model_dump(),
+        "ai_credit_memo": ai_memo,
         "kfs_apr_preview": {
             "nominal_roi_pct": req.requested_Nominal_roi_pct,
             "all_inclusive_apr_pct": apr_preview,
@@ -313,19 +339,31 @@ def _run_credit_verification(req: CreditPolicyRequest) -> dict[str, Any]:
 @app.get("/api/governance/inspect-pii")
 def inspect_pii_get() -> dict[str, Any]:
     """Run default PAN/Aadhaar/Account sample through Cloud DLP and Model Armor."""
-    req = PIIInspectRequest(use_live_cloud_dlp=False)
-    return inspect_and_redact_pii(req.text, use_live_cloud_dlp=req.use_live_cloud_dlp).model_dump()
+    req = PIIInspectRequest(use_live_cloud_dlp=False, include_ai_verdict=False)
+    payload = inspect_and_redact_pii(
+        req.text, use_live_cloud_dlp=req.use_live_cloud_dlp
+    ).model_dump()
+    payload["ai_security_verdict"] = generate_dlp_security_verdict_with_vertex(
+        payload, use_live_vertex=False
+    )
+    return payload
 
 
 @app.post("/api/governance/inspect-pii")
 def inspect_pii_post(request: PIIInspectRequest | None = None) -> dict[str, Any]:
     """Inspect and mask Indian financial PII (`INDIA_PAN_INDIVIDUAL`, `INDIA_AADHAAR_INDIVIDUAL`) and screen for prompt injection."""
     req = request or PIIInspectRequest()
-    return inspect_and_redact_pii(req.text, use_live_cloud_dlp=req.use_live_cloud_dlp).model_dump()
+    payload = inspect_and_redact_pii(
+        req.text, use_live_cloud_dlp=req.use_live_cloud_dlp
+    ).model_dump()
+    payload["ai_security_verdict"] = generate_dlp_security_verdict_with_vertex(
+        payload, use_live_vertex=req.include_ai_verdict
+    )
+    return payload
 
 
 @app.get("/api/governance/telemetry")
-def governance_telemetry(use_live_bq: bool = False) -> dict[str, Any]:
+def governance_telemetry(use_live_bq: bool = True) -> dict[str, Any]:
     """Return BigQuery WBS benchmarks and department token cost governance telemetry."""
     return {
         "wbs_benchmarks": get_wbs_benchmarks(use_live_bq=use_live_bq),

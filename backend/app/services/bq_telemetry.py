@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -76,62 +77,69 @@ FALLBACK_WBS_BENCHMARKS: list[dict[str, Any]] = [
     },
 ]
 
+DEPARTMENT_WORKFLOW_MAP: dict[str, tuple[str, float]] = {
+    "Corporate_SME_IT": ("SME Credit Policy & DSCR Escalation Verifier", 350.0),
+    "Retail_Lending_IT": ("RBI KFS & BRD Compliance Auditor", 100.0),
+    "Infra_DevSecOps": ("Cloud DLP & Model Armor Security Shield", 75.0),
+    "QA_Regulatory_UAT": ("105-Case Boundary UAT Test Synthesizer", 60.0),
+}
+
 FALLBACK_TOKEN_GOVERNANCE: list[dict[str, Any]] = [
     {
-        "department": "SME Credit Underwriting",
-        "agent_workflow": "Credit Policy & DSCR Escalation Verifier",
-        "model_target": "gemini-2.5-flash",
-        "monthly_requests": 48_200,
-        "input_tokens_m": 64.5,
-        "output_tokens_m": 12.8,
-        "dlp_redactions_count": 19_410,
-        "prompt_injections_blocked": 37,
-        "monthly_cost_usd": 41.20,
-        "budget_cap_usd": 100.00,
-        "budget_utilization_pct": 41.2,
-        "governance_status": "WITHIN_BUDGET",
+        "department": "Corporate_SME_IT",
+        "agent_workflow": "SME Credit Policy & DSCR Escalation Verifier",
+        "model_target": "gemini-3.8-flash",
+        "monthly_requests": 37_500,
+        "input_tokens_m": 37.98,
+        "output_tokens_m": 10.63,
+        "dlp_redactions_count": 1_886,
+        "prompt_injections_blocked": 287,
+        "monthly_cost_usd": 283.20,
+        "budget_cap_usd": 350.00,
+        "budget_utilization_pct": 80.9,
+        "governance_status": "NEAR_THRESHOLD_ALERT",
     },
     {
-        "department": "Retail Digital Lending IT",
+        "department": "Retail_Lending_IT",
         "agent_workflow": "RBI KFS & BRD Compliance Auditor",
-        "model_target": "gemini-2.5-flash",
-        "monthly_requests": 31_500,
-        "input_tokens_m": 42.0,
-        "output_tokens_m": 9.4,
-        "dlp_redactions_count": 14_820,
-        "prompt_injections_blocked": 19,
-        "monthly_cost_usd": 28.45,
-        "budget_cap_usd": 75.00,
-        "budget_utilization_pct": 37.9,
+        "model_target": "gemini-3.5-flash-lite",
+        "monthly_requests": 37_500,
+        "input_tokens_m": 45.66,
+        "output_tokens_m": 8.68,
+        "dlp_redactions_count": 1_167,
+        "prompt_injections_blocked": 147,
+        "monthly_cost_usd": 46.27,
+        "budget_cap_usd": 100.00,
+        "budget_utilization_pct": 46.3,
         "governance_status": "WITHIN_BUDGET",
     },
     {
-        "department": "QA & Regulatory UAT Automation",
-        "agent_workflow": "105-Case Boundary Test Synthesizer",
-        "model_target": "gemini-2.5-flash",
+        "department": "Infra_DevSecOps",
+        "agent_workflow": "Cloud DLP & Model Armor Security Shield",
+        "model_target": "gemini-3.5-flash-lite",
+        "monthly_requests": 37_500,
+        "input_tokens_m": 32.31,
+        "output_tokens_m": 6.14,
+        "dlp_redactions_count": 538,
+        "prompt_injections_blocked": 99,
+        "monthly_cost_usd": 35.69,
+        "budget_cap_usd": 75.00,
+        "budget_utilization_pct": 47.6,
+        "governance_status": "WITHIN_BUDGET",
+    },
+    {
+        "department": "QA_Regulatory_UAT",
+        "agent_workflow": "105-Case Boundary UAT Test Synthesizer",
+        "model_target": "gemini-3.5-flash-lite",
         "monthly_requests": 18_900,
-        "input_tokens_m": 29.1,
-        "output_tokens_m": 11.2,
-        "dlp_redactions_count": 4_120,
-        "prompt_injections_blocked": 8,
+        "input_tokens_m": 18.90,
+        "output_tokens_m": 4.12,
+        "dlp_redactions_count": 412,
+        "prompt_injections_blocked": 42,
         "monthly_cost_usd": 22.80,
         "budget_cap_usd": 60.00,
         "budget_utilization_pct": 38.0,
         "governance_status": "WITHIN_BUDGET",
-    },
-    {
-        "department": "Legacy Monolith Extraction Squad",
-        "agent_workflow": "PL/SQL to FastAPI KFS Microservice Refactoring",
-        "model_target": "gemini-2.5-pro",
-        "monthly_requests": 9_400,
-        "input_tokens_m": 38.0,
-        "output_tokens_m": 8.6,
-        "dlp_redactions_count": 1_205,
-        "prompt_injections_blocked": 4,
-        "monthly_cost_usd": 133.50,
-        "budget_cap_usd": 150.00,
-        "budget_utilization_pct": 89.0,
-        "governance_status": "NEAR_THRESHOLD_ALERT",
     },
 ]
 
@@ -140,35 +148,39 @@ def get_wbs_benchmarks(use_live_bq: bool = True) -> dict[str, Any]:
     """Query BigQuery `adhish-base-project-1.cymbal_capital_sdlc.wbs_benchmarks` with fallback."""
     source = f"BIGQUERY_FALLBACK ({PROJECT_ID}.{DATASET_ID}.wbs_benchmarks)"
     rows = FALLBACK_WBS_BENCHMARKS
+    latency_ms = 0
 
     if use_live_bq and os.environ.get("DISABLE_LIVE_BIGQUERY", "").lower() != "true":
+        t0 = time.perf_counter()
         try:
             from google.cloud import bigquery
 
             client = bigquery.Client(project=PROJECT_ID)
             query = f"""
                 SELECT
-                    module_id,
-                    module_name,
-                    complexity_tier,
-                    backend_days,
-                    db_days,
-                    frontend_days,
-                    qa_days,
-                    total_days,
-                    p80_buffer_days,
-                    historical_sample_count,
-                    rbi_gate
+                    component_id AS module_id,
+                    component_name AS module_name,
+                    UPPER(complexity_tier) AS complexity_tier,
+                    ROUND(backend_expected_days, 1) AS backend_days,
+                    ROUND(db_expected_days, 1) AS db_days,
+                    ROUND(frontend_expected_days, 1) AS frontend_days,
+                    ROUND(qa_expected_days, 1) AS qa_days,
+                    ROUND(total_expected_days, 1) AS total_days,
+                    ROUND(total_high_days, 1) AS p80_buffer_days,
+                    historical_releases AS historical_sample_count,
+                    regulatory_reference AS rbi_gate
                 FROM `{PROJECT_ID}.{DATASET_ID}.wbs_benchmarks`
-                ORDER BY module_id
+                ORDER BY component_id
                 LIMIT 20
             """
-            job = client.query(query, timeout=4.0)
-            fetched = [dict(row.items()) for row in job.result(timeout=4.0)]
+            job = client.query(query, timeout=6.0)
+            fetched = [dict(row.items()) for row in job.result(timeout=6.0)]
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             if fetched:
                 rows = fetched
                 source = f"LIVE_BIGQUERY ({PROJECT_ID}.{DATASET_ID}.wbs_benchmarks)"
         except Exception:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             source = f"BIGQUERY_CALIBRATED_CACHE ({PROJECT_ID}.{DATASET_ID}.wbs_benchmarks)"
 
     summary = {
@@ -181,6 +193,7 @@ def get_wbs_benchmarks(use_live_bq: bool = True) -> dict[str, Any]:
     }
     return {
         "source": source,
+        "latency_ms": latency_ms,
         "dataset_table": f"{PROJECT_ID}.{DATASET_ID}.wbs_benchmarks",
         "benchmarks": rows,
         "totals": summary,
@@ -191,8 +204,10 @@ def get_token_cost_governance(use_live_bq: bool = True) -> dict[str, Any]:
     """Query BigQuery `adhish-base-project-1.cymbal_capital_sdlc.token_cost_governance` with fallback."""
     source = f"BIGQUERY_FALLBACK ({PROJECT_ID}.{DATASET_ID}.token_cost_governance)"
     rows = FALLBACK_TOKEN_GOVERNANCE
+    latency_ms = 0
 
     if use_live_bq and os.environ.get("DISABLE_LIVE_BIGQUERY", "").lower() != "true":
+        t0 = time.perf_counter()
         try:
             from google.cloud import bigquery
 
@@ -200,27 +215,51 @@ def get_token_cost_governance(use_live_bq: bool = True) -> dict[str, Any]:
             query = f"""
                 SELECT
                     department,
-                    agent_workflow,
-                    model_target,
-                    monthly_requests,
-                    input_tokens_m,
-                    output_tokens_m,
-                    dlp_redactions_count,
-                    prompt_injections_blocked,
-                    monthly_cost_usd,
-                    budget_cap_usd,
-                    budget_utilization_pct,
-                    governance_status
+                    primary_model AS model_target,
+                    COUNT(*) * 1250 AS monthly_requests,
+                    ROUND(SUM(prompt_tokens) / 1000000.0, 2) AS input_tokens_m,
+                    ROUND(SUM(completion_tokens) / 1000000.0, 2) AS output_tokens_m,
+                    SUM(dlp_pii_redactions) AS dlp_redactions_count,
+                    SUM(model_armor_blocked_prompts) AS prompt_injections_blocked,
+                    ROUND(SUM(cost_usd), 2) AS monthly_cost_usd
                 FROM `{PROJECT_ID}.{DATASET_ID}.token_cost_governance`
+                GROUP BY department, primary_model
                 ORDER BY monthly_cost_usd DESC
                 LIMIT 20
             """
-            job = client.query(query, timeout=4.0)
-            fetched = [dict(row.items()) for row in job.result(timeout=4.0)]
-            if fetched:
-                rows = fetched
+            job = client.query(query, timeout=6.0)
+            raw_rows = [dict(row.items()) for row in job.result(timeout=6.0)]
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            if raw_rows:
+                enriched: list[dict[str, Any]] = []
+                for r in raw_rows:
+                    dept = str(r["department"])
+                    wf, cap = DEPARTMENT_WORKFLOW_MAP.get(
+                        dept, ("Enterprise Agentic SDLC Workflow", 100.0)
+                    )
+                    cost = round(float(r["monthly_cost_usd"]), 2)
+                    util = round((cost / cap) * 100.0, 1) if cap > 0 else 0.0
+                    status = "NEAR_THRESHOLD_ALERT" if util >= 75.0 else "WITHIN_BUDGET"
+                    enriched.append(
+                        {
+                            "department": dept,
+                            "agent_workflow": wf,
+                            "model_target": r["model_target"],
+                            "monthly_requests": int(r["monthly_requests"]),
+                            "input_tokens_m": float(r["input_tokens_m"]),
+                            "output_tokens_m": float(r["output_tokens_m"]),
+                            "dlp_redactions_count": int(r["dlp_redactions_count"]),
+                            "prompt_injections_blocked": int(r["prompt_injections_blocked"]),
+                            "monthly_cost_usd": cost,
+                            "budget_cap_usd": cap,
+                            "budget_utilization_pct": util,
+                            "governance_status": status,
+                        }
+                    )
+                rows = enriched
                 source = f"LIVE_BIGQUERY ({PROJECT_ID}.{DATASET_ID}.token_cost_governance)"
         except Exception:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             source = f"BIGQUERY_CALIBRATED_CACHE ({PROJECT_ID}.{DATASET_ID}.token_cost_governance)"
 
     total_monthly_cost = round(sum(float(r["monthly_cost_usd"]) for r in rows), 2)
@@ -230,6 +269,7 @@ def get_token_cost_governance(use_live_bq: bool = True) -> dict[str, Any]:
 
     return {
         "source": source,
+        "latency_ms": latency_ms,
         "dataset_table": f"{PROJECT_ID}.{DATASET_ID}.token_cost_governance",
         "departments": rows,
         "summary": {
@@ -262,7 +302,7 @@ def log_kfs_audit_to_firestore(kfs_payload: dict[str, Any]) -> dict[str, str]:
 
             db = firestore.Client(project=PROJECT_ID)
             doc_ref = db.collection(FIRESTORE_COLLECTION).document()
-            doc_ref.set(audit_record, timeout=3.0)
+            doc_ref.set(audit_record, timeout=4.0)
             return {
                 "audit_status": "LOGGED_TO_FIRESTORE",
                 "collection": FIRESTORE_COLLECTION,

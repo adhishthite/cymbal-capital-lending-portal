@@ -66,6 +66,10 @@ class KFSRequest(BaseModel):
         default="OVERDUE_INSTALLMENT",
         description="Basis on which late payment penal charge is levied",
     )
+    include_ai_verdict: bool = Field(
+        default=False,
+        description="When True, invoke live Vertex AI gemini-3.5-flash-lite for statutory KFS audit verdict",
+    )
 
 
 class CoolingOffResult(BaseModel):
@@ -152,6 +156,10 @@ class CreditPolicyRequest(BaseModel):
     cibil_commercial_rank: int = Field(default=3, description="CIBIL MSME Rank (CMR-1 to CMR-10)")
     gstin_12m_turnover_inr: float = Field(default=42_000_000.0)
     requested_Nominal_roi_pct: float = Field(default=14.50)
+    include_ai_memo: bool = Field(
+        default=False,
+        description="When True, invoke live Vertex AI gemini-3.8-flash for underwriting deviation memo",
+    )
 
 
 class CreditPolicyResult(BaseModel):
