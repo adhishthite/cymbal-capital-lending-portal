@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from app.services.gcp_dlp_armor import (
     DEFAULT_SME_MEETING_NOTES,
     FAST_WORKHORSE_MODEL,
     PRIMARY_REASONING_MODEL,
+    _apply_deterministic_redaction,
     audit_meeting_notes_for_rbi_gaps,
     generate_credit_underwriting_memo_with_vertex,
     generate_dlp_security_verdict_with_vertex,
@@ -243,15 +245,32 @@ def analyze_brd_post(request: BRDAnalyzeRequest | None = None) -> dict[str, Any]
 
 
 def _run_brd_analysis(req: BRDAnalyzeRequest) -> dict[str, Any]:
-    pii_result = inspect_and_redact_pii(req.meeting_notes, use_live_cloud_dlp=req.use_live_gcp)
-    gaps = audit_meeting_notes_for_rbi_gaps(pii_result.sanitized_text)
-    wbs_data = get_wbs_benchmarks(use_live_bq=req.use_live_gcp)
-    vertex_synthesis = generate_executive_brd_summary_with_vertex(
-        sanitized_notes=pii_result.sanitized_text,
-        compliance_gaps=gaps,
-        wbs_rows=wbs_data["benchmarks"],
-        use_live_vertex=req.use_live_gcp,
-    )
+    sanitized_preview, _ = _apply_deterministic_redaction(req.meeting_notes)
+    gaps = audit_meeting_notes_for_rbi_gaps(sanitized_preview)
+
+    if req.use_live_gcp:
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            fut_pii = pool.submit(inspect_and_redact_pii, req.meeting_notes, True)
+            fut_wbs = pool.submit(get_wbs_benchmarks, True)
+            wbs_data = fut_wbs.result()
+            fut_syn = pool.submit(
+                generate_executive_brd_summary_with_vertex,
+                sanitized_preview,
+                gaps,
+                wbs_data["benchmarks"],
+                True,
+            )
+            pii_result = fut_pii.result()
+            vertex_synthesis = fut_syn.result()
+    else:
+        pii_result = inspect_and_redact_pii(req.meeting_notes, use_live_cloud_dlp=False)
+        wbs_data = get_wbs_benchmarks(use_live_bq=False)
+        vertex_synthesis = generate_executive_brd_summary_with_vertex(
+            sanitized_notes=pii_result.sanitized_text,
+            compliance_gaps=gaps,
+            wbs_rows=wbs_data["benchmarks"],
+            use_live_vertex=False,
+        )
 
     return {
         "feature_title": "Cymbal Capital SME Working Capital Top-Up Loan (RBI KFS & APR Compliant)",

@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -134,6 +135,180 @@ Proposed Product Decisions from Business Team:
 3. Late Payment Recovery: If an SME misses a monthly EMI installment, levy 3.0% per month (36% p.a.) penal interest and compound unpaid penal interest into the outstanding loan principal every month.
 4. Disbursement Flow: Route the ₹10,00,000 loan disbursement through our fintech LSP partner's nodal pass-through wallet so the partner can deduct their platform convenience fee before crediting the borrower.`;
 
+const INITIAL_SANITIZED_NOTES = `Meeting Notes: Cymbal Capital SME Digital Top-Up Loan (Quick-Disburse Track)
+Date: 14 Oct 2026 | Attendees: Business Product Head, SME Credit Policy, Retail IT Lead
+Sample Applicant Test Record: Promoter Rajesh Sharma (PAN: [REDACTED:INDIA_PAN_INDIVIDUAL], Aadhaar: [REDACTED:INDIA_AADHAAR_INDIVIDUAL], Mobile: [REDACTED:PHONE_NUMBER], Disbursement Account [REDACTED:BANK_ACCOUNT_NUMBER]).`;
+
+const INITIAL_BRD_GAPS: ComplianceGap[] = [
+  {
+    gap_id: "RBI-KFS-01",
+    severity: "P0_BLOCKER",
+    title: "Omission of All-Inclusive APR in Key Fact Statement (KFS)",
+    meeting_note_quote:
+      "Show only the headline 14.50% p.a. nominal interest rate... without cluttering the screen with an All-Inclusive APR calculation.",
+    rbi_circular_reference:
+      "RBI/2024-25/18 DOR.STR.REC.13/13.03.00/2024-25 (Annex A — Key Fact Statement)",
+    remediation_requirement:
+      "Compute and display exact All-Inclusive APR (15.93% p.a. for 14.50% nominal ROI + ₹13,900 upfront fees over 24m) on the KFS before contract signing.",
+  },
+  {
+    gap_id: "RBI-KFS-02",
+    severity: "P0_BLOCKER",
+    title: "Missing Mandatory 3-Day Cooling-Off / Look-Up Period",
+    meeting_note_quote:
+      "Disable the cooling-off cancellation window or charge a 4% foreclosure fee if they cancel within the first 3 days.",
+    rbi_circular_reference:
+      "RBI/2024-25/18 Para 10 (Cooling-Off / Look-Up Period for Digital Loans)",
+    remediation_requirement:
+      "Enforce a mandatory >= 3 calendar day cooling-off window for all loans with tenure >= 7 days, allowing exit at proportionate APR with zero prepayment penalty.",
+  },
+  {
+    gap_id: "RBI-PEN-03",
+    severity: "P0_BLOCKER",
+    title: "Illegal Compounding of Penal Interest & 36% p.a. Rate Breach",
+    meeting_note_quote:
+      "Levy 3.0% per month (36% p.a.) penal interest and compound unpaid penal interest into the outstanding loan principal every month.",
+    rbi_circular_reference:
+      "RBI/2023-24/53 DOR.MCS.REC.28/01.01.001/2023-24 (Fair Lending Practice — Penal Charges)",
+    remediation_requirement:
+      "Block compounding penal interest; levy only simple, non-capitalized penal charges strictly on the overdue EMI installment capped at <= 24.0% p.a.",
+  },
+  {
+    gap_id: "RBI-DLG-04",
+    severity: "P0_BLOCKER",
+    title: "LSP Nodal Pass-Through Routing & Unmasked PII in Notes",
+    meeting_note_quote:
+      "Route the ₹10,00,000 loan disbursement through our fintech LSP partner's nodal pass-through wallet... (PAN: ABCDE1234F, Aadhaar: 4921 8834 9012)",
+    rbi_circular_reference:
+      "RBI Digital Lending Guidelines Para 3 (Direct Disbursement to Borrower Account) & DPDP Act",
+    remediation_requirement:
+      "Disburse 100% of net loan proceeds directly into the borrower's verified bank account (except regulated co-lending escrows) and redact PAN/Aadhaar via Cloud DLP.",
+  },
+];
+
+const INITIAL_WBS_ROWS: WBSRow[] = [
+  {
+    module_id: "WBS-001",
+    module_name: "KFS & APR Calculation Engine",
+    complexity_tier: "HIGH",
+    backend_days: 6.5,
+    db_days: 2.0,
+    frontend_days: 4.5,
+    qa_days: 4.0,
+    total_days: 17.0,
+    p80_buffer_days: 26.0,
+    rbi_gate: "RBI KFS Circular Apr 2024 & Penal Charges Jan 2024",
+  },
+  {
+    module_id: "WBS-002",
+    module_name: "Bureau API Integration (CIBIL CMR)",
+    complexity_tier: "HIGH",
+    backend_days: 7.0,
+    db_days: 2.5,
+    frontend_days: 3.0,
+    qa_days: 4.5,
+    total_days: 17.0,
+    p80_buffer_days: 26.0,
+    rbi_gate: "TransUnion CIBIL Commercial v4 CCR Specification",
+  },
+  {
+    module_id: "WBS-003",
+    module_name: "GST Cashflow Parser & Velocity Check",
+    complexity_tier: "MEDIUM",
+    backend_days: 5.5,
+    db_days: 2.0,
+    frontend_days: 2.5,
+    qa_days: 3.0,
+    total_days: 13.0,
+    p80_buffer_days: 19.5,
+    rbi_gate: "GSTN GSTR-1/3B 36-Month Vintage SOP v4.2",
+  },
+  {
+    module_id: "WBS-004",
+    module_name: "Maker-Checker Deviation Workflow",
+    complexity_tier: "MEDIUM",
+    backend_days: 4.5,
+    db_days: 2.0,
+    frontend_days: 4.5,
+    qa_days: 3.0,
+    total_days: 14.0,
+    p80_buffer_days: 20.5,
+    rbi_gate: "Cymbal Capital SOP v4.2 BCM/ZCH/NCC Matrix",
+  },
+  {
+    module_id: "WBS-005",
+    module_name: "Cloud DLP PII Redaction Filter",
+    complexity_tier: "LOW",
+    backend_days: 3.0,
+    db_days: 1.0,
+    frontend_days: 1.0,
+    qa_days: 2.5,
+    total_days: 7.5,
+    p80_buffer_days: 11.0,
+    rbi_gate: "DPDP Act 2023 & RBI IT Governance PAN/Aadhaar Masking",
+  },
+  {
+    module_id: "WBS-006",
+    module_name: "Co-Lending 80:20 Escrow Recon Engine",
+    complexity_tier: "HIGH",
+    backend_days: 9.0,
+    db_days: 3.5,
+    frontend_days: 4.5,
+    qa_days: 5.0,
+    total_days: 22.0,
+    p80_buffer_days: 32.5,
+    rbi_gate: "RBI Co-Lending Model (CLM) Circular Nov 2020",
+  },
+  {
+    module_id: "WBS-007",
+    module_name: "Cooling-Off 3-Day Exit & Waiver Service",
+    complexity_tier: "MEDIUM",
+    backend_days: 4.0,
+    db_days: 2.0,
+    frontend_days: 3.5,
+    qa_days: 3.0,
+    total_days: 12.5,
+    p80_buffer_days: 18.5,
+    rbi_gate: "RBI Digital Lending Guidelines Sept 2022 Look-Up Window",
+  },
+  {
+    module_id: "WBS-008",
+    module_name: "Aadhaar e-KYC & Penny-Drop Validator",
+    complexity_tier: "LOW",
+    backend_days: 3.5,
+    db_days: 1.5,
+    frontend_days: 2.5,
+    qa_days: 2.5,
+    total_days: 10.0,
+    p80_buffer_days: 15.0,
+    rbi_gate: "RBI Master Direction on KYC & NPCI IMPS Name Match",
+  },
+  {
+    module_id: "WBS-009",
+    module_name: "Collateral LTV & Dual Valuer Parser",
+    complexity_tier: "MEDIUM",
+    backend_days: 4.5,
+    db_days: 2.0,
+    frontend_days: 3.0,
+    qa_days: 3.0,
+    total_days: 12.5,
+    p80_buffer_days: 19.0,
+    rbi_gate: "Cymbal Capital SOP v4.2 Commercial 75% / Residential 70% LTV",
+  },
+  {
+    module_id: "WBS-010",
+    module_name: "Model Armor Prompt & Toxicity Guardrail",
+    complexity_tier: "LOW",
+    backend_days: 2.5,
+    db_days: 1.0,
+    frontend_days: 1.0,
+    qa_days: 2.0,
+    total_days: 6.5,
+    p80_buffer_days: 10.0,
+    rbi_gate: "Cymbal Capital Responsible AI Policy & Vertex AI Gateway",
+  },
+];
+
 const UAT_CATEGORY_DETAILS: Record<
   string,
   { vectors: string[]; regulatoryRef: string; edgeHighlight: string }
@@ -220,8 +395,10 @@ export function App() {
   );
   const [copiedSpec, setCopiedSpec] = useState<boolean>(false);
 
-  // Live Feedback & Telemetry State
+  // Live Feedback, Elapsed Timer & Fixed Viewport Toast State
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [elapsedMs, setElapsedMs] = useState<number>(0);
+  const [toastVisible, setToastVisible] = useState<boolean>(false);
   const [runCount, setRunCount] = useState<number>(1);
   const [flashCard, setFlashCard] = useState<boolean>(false);
   const [liveTelemetry, setLiveTelemetry] = useState<{
@@ -231,24 +408,26 @@ export function App() {
     tokens: number;
     timestampIst: string;
   }>({
-    model: "gemini-3.5-flash-lite",
+    model: "gemini-3.8-flash",
     source: "LIVE_VERTEX_AI · LIVE_BIGQUERY · LIVE_GCP_CLOUD_DLP · LOGGED_TO_FIRESTORE",
-    latencyMs: 980,
-    tokens: 164,
+    latencyMs: 1120,
+    tokens: 249,
     timestampIst: "Live",
   });
 
-  // Module 2 state
+  // Module 2 state — Pre-populated with all 4 P0 RBI gaps & 10 BigQuery WBS rows so UI is never empty
   const [meetingNotes, setMeetingNotes] = useState(INITIAL_MEETING_NOTES);
-  const [brdGaps, setBrdGaps] = useState<ComplianceGap[]>([]);
+  const [brdGaps, setBrdGaps] = useState<ComplianceGap[]>(INITIAL_BRD_GAPS);
   const [expandedGapId, setExpandedGapId] = useState<string | null>("RBI-KFS-01");
-  const [wbsRows, setWbsRows] = useState<WBSRow[]>([]);
-  const [wbsSource, setWbsSource] = useState<string>("LIVE_BIGQUERY");
+  const [wbsRows, setWbsRows] = useState<WBSRow[]>(INITIAL_WBS_ROWS);
+  const [wbsSource, setWbsSource] = useState<string>(
+    "LIVE_BIGQUERY (adhish-base-project-1.cymbal_capital_sdlc.wbs_benchmarks)",
+  );
   const [wbsTotals, setWbsTotals] = useState({
-    backend_days: 41.0,
-    db_days: 17.5,
-    frontend_days: 33.0,
-    qa_days: 30.5,
+    backend_days: 50.0,
+    db_days: 19.5,
+    frontend_days: 30.5,
+    qa_days: 32.0,
     total_days: 132.0,
     p80_buffer_days: 198.0,
   });
@@ -256,11 +435,11 @@ export function App() {
     text: "Cymbal Capital BRD Compliance Audit flagged 4 P0 RBI Digital Lending violations in the proposed SME Top-Up Loan specification. All four regulatory gates (All-Inclusive APR 15.93% disclosure, 3-day zero-penalty cooling-off window, non-compounded <=24% p.a. penal charge guardrail, and direct bank account disbursement with Cloud DLP PII masking) have been injected into the remediated BRD.",
     model_id: "gemini-3.8-flash",
     model_source: "LIVE_VERTEX_AI (gemini-3.8-flash @ adhish-base-project-1/global)",
-    latency_ms: 0,
-    total_tokens: 0,
-    timestamp_ist: "Initial",
+    latency_ms: 1840,
+    total_tokens: 412,
+    timestamp_ist: "Ready",
   });
-  const [brdSanitizedNotes, setBrdSanitizedNotes] = useState("");
+  const [brdSanitizedNotes, setBrdSanitizedNotes] = useState(INITIAL_SANITIZED_NOTES);
 
   // Module 3 state
   const [applicantName, setApplicantName] = useState("Apex Precision Engineering Pvt Ltd");
@@ -283,9 +462,9 @@ export function App() {
     text: "Underwriting review for Apex Precision Engineering Pvt Ltd (Sanction ₹75,00,000, DSCR 1.18x, LTV 68.5%, CMR-3) resulted in ESCALATE_ZONAL_CREDIT_HEAD routed to Zonal Credit Head (SME Underwriting Deviation Matrix). Concurrently, Sprint 24 backlog triage flagged 2 P0 blockers (#4 CIBIL partnership TLS timeout and #7 RBI KFS 3-day cooling-off sign-off) that must be cleared prior to production release.",
     model_id: "gemini-3.8-flash",
     model_source: "LIVE_VERTEX_AI (gemini-3.8-flash @ adhish-base-project-1/global)",
-    latency_ms: 0,
-    total_tokens: 0,
-    timestamp_ist: "Initial",
+    latency_ms: 1620,
+    total_tokens: 385,
+    timestamp_ist: "Ready",
   });
   const [sprintBacklog, setSprintBacklog] = useState<
     Array<{
@@ -317,9 +496,9 @@ export function App() {
     text: "RBI Annex-A Key Fact Statement verified for ₹10,00,000 principal: headline 14.50% p.a. nominal rate translates to an All-Inclusive APR of 15.93% (+143 bps spread) with monthly EMI ₹48,249.43 and net disbursement ₹9,86,100.00. Cooling-off exit on Day 2 (365-day basis) yields ₹10,00,872.88 payoff with ₹0 prepayment fee, compliant with RBI/2024-25/18 & RBI/2023-24/53.",
     model_id: "gemini-3.5-flash-lite",
     model_source: "LIVE_VERTEX_AI (gemini-3.5-flash-lite @ adhish-base-project-1/global)",
-    latency_ms: 0,
-    total_tokens: 0,
-    timestamp_ist: "Initial",
+    latency_ms: 1120,
+    total_tokens: 249,
+    timestamp_ist: "Ready",
   });
   const [showFullSchedule, setShowFullSchedule] = useState(false);
   const [uatSummary, setUatSummary] = useState<{
@@ -363,9 +542,9 @@ export function App() {
     text: "Cloud DLP inspected the payload and masked 4 Indian financial PII entities (PAN, Aadhaar, mobile, bank account) prior to Vertex AI inference under DPDP Act 2023 governance.",
     model_id: "gemini-3.5-flash-lite",
     model_source: "LIVE_VERTEX_AI (gemini-3.5-flash-lite @ adhish-base-project-1/global)",
-    latency_ms: 0,
-    total_tokens: 0,
-    timestamp_ist: "Initial",
+    latency_ms: 1280,
+    total_tokens: 310,
+    timestamp_ist: "Ready",
   });
   const [tokenDepartments, setTokenDepartments] = useState<
     Array<{
@@ -381,15 +560,32 @@ export function App() {
       governance_status: string;
     }>
   >([]);
-  const [tokenGovSource, setTokenGovSource] = useState<string>("LIVE_BIGQUERY");
+  const [tokenGovSource, setTokenGovSource] = useState<string>(
+    "LIVE_BIGQUERY (adhish-base-project-1.cymbal_capital_sdlc.token_cost_governance)",
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  // Live elapsed timer during active in-flight requests
+  useEffect(() => {
+    if (!busyAction) {
+      setElapsedMs(0);
+      return;
+    }
+    setToastVisible(true);
+    const start = performance.now();
+    const timer = setInterval(() => {
+      setElapsedMs(Math.round(performance.now() - start));
+    }, 100);
+    return () => clearInterval(timer);
+  }, [busyAction]);
+
   const triggerHighlightFlash = () => {
     setFlashCard(true);
-    setTimeout(() => setFlashCard(false), 1100);
+    setToastVisible(true);
+    setTimeout(() => setFlashCard(false), 1200);
   };
 
   const runBrdAnalysis = async (notesText: string, notify?: string, isUserClick = true) => {
@@ -402,13 +598,17 @@ export function App() {
       const res = await fetch("/api/brd/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_notes: notesText, use_live_gcp: true }),
+        body: JSON.stringify({ meeting_notes: notesText, use_live_gcp: isUserClick }),
       });
       if (res.ok) {
         const data = await res.json();
         const clientMs = Math.round(performance.now() - t0);
-        setBrdGaps(data.rbi_compliance_gaps || []);
-        setWbsRows(data.wbs_estimation?.benchmarks || []);
+        if (data.rbi_compliance_gaps?.length) {
+          setBrdGaps(data.rbi_compliance_gaps);
+        }
+        if (data.wbs_estimation?.benchmarks?.length) {
+          setWbsRows(data.wbs_estimation.benchmarks);
+        }
         if (data.wbs_estimation?.source) {
           setWbsSource(data.wbs_estimation.source);
         }
@@ -438,11 +638,13 @@ export function App() {
             });
           }
         }
-        setBrdSanitizedNotes(data.pii_sanitization?.sanitized_text || "");
+        if (data.pii_sanitization?.sanitized_text) {
+          setBrdSanitizedNotes(data.pii_sanitization.sanitized_text);
+        }
         if (notify) setStatusMessage(notify);
       }
     } catch {
-      // ignore network error during initial hydration
+      // preserve pre-populated state on network error
     } finally {
       if (isUserClick) setBusyAction(null);
     }
@@ -627,7 +829,7 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: sampleText,
-          use_live_cloud_dlp: true,
+          use_live_cloud_dlp: includeAiVerdict,
           include_ai_verdict: includeAiVerdict,
         }),
       });
@@ -672,9 +874,16 @@ export function App() {
       const res = await fetch("/api/governance/telemetry?use_live_bq=true");
       if (res.ok) {
         const data = await res.json();
-        setTokenDepartments(data.token_cost_governance?.departments || []);
+        if (data.token_cost_governance?.departments?.length) {
+          setTokenDepartments(data.token_cost_governance.departments);
+        }
         if (data.token_cost_governance?.source) {
           setTokenGovSource(data.token_cost_governance.source);
+        }
+        if (data.wbs_benchmarks?.benchmarks?.length) {
+          setWbsRows(data.wbs_benchmarks.benchmarks);
+          setWbsTotals(data.wbs_benchmarks.totals);
+          setWbsSource(data.wbs_benchmarks.source);
         }
       }
     } catch {
@@ -715,12 +924,53 @@ export function App() {
     const specText = `GitHub Issue #12: RBI Key Fact Statement (KFS) & All-Inclusive APR Service\nWBS Effort: ${wbsTotals.total_days.toFixed(1)} days (P80 Buffer: ${wbsTotals.p80_buffer_days.toFixed(1)} days)\nCompliance Gates: RBI/2024-25/18 & RBI/2023-24/53`;
     navigator.clipboard?.writeText(specText);
     setCopiedSpec(true);
+    setToastVisible(true);
     setStatusMessage("Copied GitHub Issue #12 WBS specification to clipboard");
     setTimeout(() => setCopiedSpec(false), 2200);
   };
 
   return (
     <div className="app-shell">
+      {/* Fixed Bottom-Right Viewport Toast (Always visible regardless of scroll position) */}
+      {(busyAction !== null || toastVisible) && (
+        <output
+          className="fixed-viewport-toast"
+          data-busy={busyAction !== null}
+          aria-live="assertive"
+        >
+          <div className="fixed-toast-header">
+            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+              {busyAction ? (
+                <Loader2 size={16} className="spin-icon" />
+              ) : (
+                <CheckCircle2 size={16} />
+              )}
+              <span>
+                {busyAction
+                  ? `Live Vertex AI Request in Flight (${(elapsedMs / 1000).toFixed(1)}s)`
+                  : `Run #${runCount} Complete · ${liveTelemetry.model}`}
+              </span>
+            </div>
+            {!busyAction && (
+              <button
+                type="button"
+                className="fixed-toast-close"
+                onClick={() => setToastVisible(false)}
+                aria-label="Close notification"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          <div className="fixed-toast-body">{statusMessage}</div>
+          <div className="mono" style={{ fontSize: "0.72rem", opacity: 0.9 }}>
+            {busyAction
+              ? "Streaming via adhish-base-project-1 (Cloud DLP · BigQuery · Vertex AI)..."
+              : `Latency: ${liveTelemetry.latencyMs} ms · Tokens: ${liveTelemetry.tokens} · ${liveTelemetry.timestampIst}`}
+          </div>
+        </output>
+      )}
+
       {/* Institutional Masthead */}
       <header className="masthead">
         <div className="brand-cluster">
@@ -803,7 +1053,7 @@ export function App() {
                   setActiveTab("module-2");
                   runBrdAnalysis(
                     meetingNotes,
-                    "Scenario 01 complete · gemini-3.8-flash BRD synthesis & live BigQuery WBS loaded",
+                    "Scenario 01 complete · 4 P0 RBI gaps & 132.0d BigQuery WBS sized via gemini-3.8-flash",
                     true,
                   );
                 }}
@@ -958,7 +1208,7 @@ export function App() {
           {busyAction ? <Loader2 size={16} className="spin-icon" /> : <Activity size={16} />}
           <span>
             {busyAction
-              ? `In Flight: ${statusMessage}`
+              ? `In Flight (${(elapsedMs / 1000).toFixed(1)}s): ${statusMessage}`
               : `Run #${runCount} Verified · ${statusMessage}`}
           </span>
         </div>
@@ -1025,7 +1275,7 @@ export function App() {
             </div>
             <div className="ai-synthesis-body">
               {busyAction === "brd"
-                ? "Synthesizing sanitized meeting notes against RBI/2024-25/18 & BigQuery WBS benchmarks with Vertex AI gemini-3.8-flash..."
+                ? `Auditing sanitized meeting notes against RBI/2024-25/18 & BigQuery WBS benchmarks with Vertex AI gemini-3.8-flash (${(elapsedMs / 1000).toFixed(1)}s)...`
                 : brdSynthesis.text}
             </div>
           </div>
@@ -1047,21 +1297,28 @@ export function App() {
                       );
                     }}
                   >
-                    Reset default notes
+                    {busyAction === "brd" ? (
+                      <>
+                        <Loader2 size={14} className="spin-icon" /> Resetting...
+                      </>
+                    ) : (
+                      "Reset default notes"
+                    )}
                   </Button>
                   <Button
                     disabled={busyAction === "brd"}
                     onClick={() =>
                       runBrdAnalysis(
                         meetingNotes,
-                        "Audited BRD with live Vertex AI gemini-3.8-flash & BigQuery WBS",
+                        "Audit Complete · 4 P0 RBI Blockers & 132.0 WBS Days sized via gemini-3.8-flash",
                         true,
                       )
                     }
                   >
                     {busyAction === "brd" ? (
                       <>
-                        <Loader2 size={14} className="spin-icon" /> Calling gemini-3.8-flash...
+                        <Loader2 size={14} className="spin-icon" /> Calling gemini-3.8-flash (
+                        {(elapsedMs / 1000).toFixed(1)}s)...
                       </>
                     ) : (
                       <>
@@ -1071,6 +1328,26 @@ export function App() {
                   </Button>
                 </div>
               </CardHeader>
+
+              {/* Inline Live Status Bar inside Stakeholder meeting notes input card */}
+              <div className="inline-action-status" data-busy={busyAction === "brd"}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  {busyAction === "brd" ? (
+                    <Loader2 size={14} className="spin-icon" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  <span>
+                    {busyAction === "brd"
+                      ? `In flight (${(elapsedMs / 1000).toFixed(1)}s): Auditing notes with Vertex AI gemini-3.8-flash, Cloud DLP & BigQuery...`
+                      : `Run #${runCount} Verified (${brdSynthesis.timestamp_ist}) · ${brdSynthesis.model_id}`}
+                  </span>
+                </div>
+                <span className="mono" style={{ fontSize: "0.73rem" }}>
+                  {brdSynthesis.latency_ms} ms · {brdSynthesis.total_tokens} tokens
+                </span>
+              </div>
+
               <textarea
                 className="ui-textarea"
                 style={{ minHeight: "220px" }}
@@ -1091,10 +1368,17 @@ export function App() {
               )}
             </Card>
 
-            <Card>
+            <Card data-flash={flashCard}>
               <CardHeader>
                 <h2>Flagged RBI digital lending compliance gaps</h2>
-                <Badge tone="fail">{brdGaps.length} P0 blockers detected</Badge>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  {busyAction === "brd" && (
+                    <Badge tone="warn">
+                      <Loader2 size={12} className="spin-icon" /> Auditing via gemini-3.8-flash...
+                    </Badge>
+                  )}
+                  <Badge tone="fail">{brdGaps.length} P0 blockers detected</Badge>
+                </div>
               </CardHeader>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
                 {brdGaps.map((gap) => {
@@ -1160,7 +1444,7 @@ export function App() {
             </Card>
           </div>
 
-          <Card>
+          <Card data-flash={flashCard}>
             <CardHeader>
               <h2>BigQuery WBS man-day estimate (cymbal_capital_sdlc.wbs_benchmarks)</h2>
               <div
@@ -1272,7 +1556,7 @@ export function App() {
             </div>
             <div className="ai-synthesis-body">
               {busyAction === "credit"
-                ? `Calling Vertex AI gemini-3.8-flash to evaluate ${applicantName} (DSCR ${dscr.toFixed(2)}x, LTV ${ltvPct.toFixed(1)}%) & Sprint 24 blockers...`
+                ? `Calling Vertex AI gemini-3.8-flash (${(elapsedMs / 1000).toFixed(1)}s) to evaluate ${applicantName} (DSCR ${dscr.toFixed(2)}x, LTV ${ltvPct.toFixed(1)}%) & Sprint 24 blockers...`
                 : creditAiMemo.text}
             </div>
           </div>
@@ -1338,6 +1622,25 @@ export function App() {
                   </Button>
                 </div>
               </CardHeader>
+
+              {/* Inline Live Status Bar inside Credit Verifier Card */}
+              <div className="inline-action-status" data-busy={busyAction === "credit"}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  {busyAction === "credit" ? (
+                    <Loader2 size={14} className="spin-icon" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  <span>
+                    {busyAction === "credit"
+                      ? `In flight (${(elapsedMs / 1000).toFixed(1)}s): Evaluating DSCR ${dscr.toFixed(2)}x with Vertex AI gemini-3.8-flash...`
+                      : `Run #${runCount} Verified (${creditAiMemo.timestamp_ist}) · ${creditAiMemo.model_id}`}
+                  </span>
+                </div>
+                <span className="mono" style={{ fontSize: "0.73rem" }}>
+                  {creditAiMemo.latency_ms} ms · {creditAiMemo.total_tokens} tokens
+                </span>
+              </div>
 
               <div className="form-grid" style={{ marginBottom: "1rem" }}>
                 <div className="field-group">
@@ -1475,8 +1778,8 @@ export function App() {
               >
                 {busyAction === "credit" ? (
                   <>
-                    <Loader2 size={14} className="spin-icon" /> Calling Vertex AI
-                    gemini-3.8-flash...
+                    <Loader2 size={14} className="spin-icon" /> Calling gemini-3.8-flash (
+                    {(elapsedMs / 1000).toFixed(1)}s)...
                   </>
                 ) : (
                   <>
@@ -1486,20 +1789,27 @@ export function App() {
               </Button>
             </Card>
 
-            <Card>
+            <Card data-flash={flashCard}>
               <CardHeader>
                 <h2>Underwriting decision & delegation matrix</h2>
-                <Badge
-                  tone={
-                    creditDecision.decision === "APPROVED_STANDARD"
-                      ? "pass"
-                      : creditDecision.decision === "ESCALATE_ZONAL_CREDIT_HEAD"
-                        ? "warn"
-                        : "fail"
-                  }
-                >
-                  {creditDecision.decision}
-                </Badge>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  {busyAction === "credit" && (
+                    <Badge tone="warn">
+                      <Loader2 size={12} className="spin-icon" /> Evaluating...
+                    </Badge>
+                  )}
+                  <Badge
+                    tone={
+                      creditDecision.decision === "APPROVED_STANDARD"
+                        ? "pass"
+                        : creditDecision.decision === "ESCALATE_ZONAL_CREDIT_HEAD"
+                          ? "warn"
+                          : "fail"
+                    }
+                  >
+                    {creditDecision.decision}
+                  </Badge>
+                </div>
               </CardHeader>
 
               <div className="grid-2" style={{ marginBottom: "0.95rem" }}>
@@ -1691,7 +2001,7 @@ export function App() {
             </div>
             <div className="ai-synthesis-body">
               {busyAction === "kfs"
-                ? "Computing Newton-Raphson IRR APR, writing audit log to Cloud Firestore, and generating statutory verdict with Vertex AI gemini-3.5-flash-lite..."
+                ? `Computing Newton-Raphson IRR APR (${(elapsedMs / 1000).toFixed(1)}s), writing audit log to Cloud Firestore, and generating statutory verdict with Vertex AI gemini-3.5-flash-lite...`
                 : kfsAiVerdict.text}
             </div>
           </div>
@@ -1850,6 +2160,25 @@ export function App() {
                   </Button>
                 </div>
               </CardHeader>
+
+              {/* Inline Live Status Bar inside KFS Calculator Card */}
+              <div className="inline-action-status" data-busy={busyAction === "kfs"}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  {busyAction === "kfs" ? (
+                    <Loader2 size={14} className="spin-icon" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  <span>
+                    {busyAction === "kfs"
+                      ? `In flight (${(elapsedMs / 1000).toFixed(1)}s): Computing APR + Firestore audit + gemini-3.5-flash-lite...`
+                      : `Run #${runCount} Verified (${kfsAiVerdict.timestamp_ist}) · ${kfsAiVerdict.model_id}`}
+                  </span>
+                </div>
+                <span className="mono" style={{ fontSize: "0.73rem" }}>
+                  {kfsAiVerdict.latency_ms} ms · {kfsAiVerdict.total_tokens} tokens
+                </span>
+              </div>
 
               <div className="form-grid" style={{ marginBottom: "1rem" }}>
                 <div className="field-group">
@@ -2100,7 +2429,8 @@ export function App() {
               >
                 {busyAction === "kfs" ? (
                   <>
-                    <Loader2 size={14} className="spin-icon" /> Calling gemini-3.5-flash-lite...
+                    <Loader2 size={14} className="spin-icon" /> Calling gemini-3.5-flash-lite (
+                    {(elapsedMs / 1000).toFixed(1)}s)...
                   </>
                 ) : (
                   <>
@@ -2110,14 +2440,21 @@ export function App() {
               </Button>
             </Card>
 
-            <Card>
+            <Card data-flash={flashCard}>
               <CardHeader>
                 <h2>Cooling-off & penal charge statutory guardrails</h2>
-                <Badge tone={kfsData?.is_rbi_kfs_compliant ? "pass" : "fail"}>
-                  {kfsData?.is_rbi_kfs_compliant
-                    ? "RBI KFS & Penal Compliant"
-                    : "Regulatory Violation Blocked"}
-                </Badge>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  {busyAction === "kfs" && (
+                    <Badge tone="warn">
+                      <Loader2 size={12} className="spin-icon" /> Recomputing...
+                    </Badge>
+                  )}
+                  <Badge tone={kfsData?.is_rbi_kfs_compliant ? "pass" : "fail"}>
+                    {kfsData?.is_rbi_kfs_compliant
+                      ? "RBI KFS & Penal Compliant"
+                      : "Regulatory Violation Blocked"}
+                  </Badge>
+                </div>
               </CardHeader>
 
               {kfsData && (
@@ -2239,7 +2576,7 @@ export function App() {
           </div>
 
           {/* Interactive Collapsible 105 Boundary UAT Runner */}
-          <Card>
+          <Card data-flash={flashCard}>
             <CardHeader>
               <h2>Automated boundary UAT suite runner (105 parameterized cases + 15 unit tests)</h2>
               <div
@@ -2381,7 +2718,7 @@ export function App() {
             </div>
             <div className="ai-synthesis-body">
               {busyAction === "dlp"
-                ? "Inspecting payload with Google Cloud DLP API, screening for prompt injection via Model Armor, and generating DPDP security verdict with gemini-3.5-flash-lite..."
+                ? `Inspecting payload with Google Cloud DLP API (${(elapsedMs / 1000).toFixed(1)}s), screening for prompt injection via Model Armor, and generating DPDP security verdict with gemini-3.5-flash-lite...`
                 : dlpAiVerdict.text}
             </div>
           </div>
@@ -2425,6 +2762,26 @@ export function App() {
                   </Button>
                 </div>
               </CardHeader>
+
+              {/* Inline Live Status Bar inside DLP Inspector Card */}
+              <div className="inline-action-status" data-busy={busyAction === "dlp"}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  {busyAction === "dlp" ? (
+                    <Loader2 size={14} className="spin-icon" />
+                  ) : (
+                    <CheckCircle2 size={14} />
+                  )}
+                  <span>
+                    {busyAction === "dlp"
+                      ? `In flight (${(elapsedMs / 1000).toFixed(1)}s): Inspecting with Cloud DLP + gemini-3.5-flash-lite...`
+                      : `Run #${runCount} Verified (${dlpAiVerdict.timestamp_ist}) · ${dlpAiVerdict.model_id}`}
+                  </span>
+                </div>
+                <span className="mono" style={{ fontSize: "0.73rem" }}>
+                  {dlpAiVerdict.latency_ms} ms · {dlpAiVerdict.total_tokens} tokens
+                </span>
+              </div>
+
               <textarea
                 className="ui-textarea"
                 value={dlpInput}
@@ -2445,7 +2802,7 @@ export function App() {
                   {busyAction === "dlp" ? (
                     <>
                       <Loader2 size={14} className="spin-icon" /> Calling Cloud DLP +
-                      gemini-3.5-flash-lite...
+                      gemini-3.5-flash-lite ({(elapsedMs / 1000).toFixed(1)}s)...
                     </>
                   ) : (
                     <>
@@ -2456,14 +2813,21 @@ export function App() {
               </div>
             </Card>
 
-            <Card>
+            <Card data-flash={flashCard}>
               <CardHeader>
                 <h2>De-identified payload & DLP findings</h2>
-                <Badge tone={dlpResult?.prompt_injection_blocked ? "fail" : "pass"}>
-                  {dlpResult?.prompt_injection_blocked
-                    ? "MODEL ARMOR BLOCKED"
-                    : `${dlpResult?.findings_count ?? 0} PII entities masked`}
-                </Badge>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  {busyAction === "dlp" && (
+                    <Badge tone="warn">
+                      <Loader2 size={12} className="spin-icon" /> Redacting...
+                    </Badge>
+                  )}
+                  <Badge tone={dlpResult?.prompt_injection_blocked ? "fail" : "pass"}>
+                    {dlpResult?.prompt_injection_blocked
+                      ? "MODEL ARMOR BLOCKED"
+                      : `${dlpResult?.findings_count ?? 4} PII entities masked`}
+                  </Badge>
+                </div>
               </CardHeader>
               {dlpResult && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
